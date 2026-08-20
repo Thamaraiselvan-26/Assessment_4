@@ -1,153 +1,197 @@
-import time
+from datetime import datetime, timedelta
+import threading
+
 
 class DigitalWallet:
-    def __init__(self, account_id: str, pin: str, balance: float = 0.0, daily_limit: float = 5000.0):
-        self.account_id = account_id
-        self.pin = pin
-        self.balance = balance
-        self.daily_limit = daily_limit
-        self.transactions = []
-        self.failed_pin_attempts = 0
-        
-        # Track daily limits using the current calendar date string
-        self.daily_spent_tracking = {}  # Format: { "YYYY-MM-DD": amount }
-        self.is_locked = False
+    def __init__(self):
+        self.accounts = {}
+        self.transaction_history = {}
+        self.failed_pins = {}
+        self.lock = threading.Lock()
 
-    def _get_current_date(self) -> str:
-        """Helper to get the current date for resetting daily limits."""
-        return time.strftime("%Y-%m-%d", time.localtime())
+        self.daily_limit = 50000
+        self.transaction_times = {}
 
-    def _get_daily_spent(self) -> float:
-        """Retrieves amount spent today, auto-handling daily rollovers."""
-        return self.daily_spent_tracking.get(self._get_current_date(), 0.0)
+    def create_account(self, account_id, name, pin, balance=0):
+        if account_id in self.accounts:
+            return "Account already exists"
 
-    def _add_daily_spent(self, amount: float):
-        """Accumulates spent values tied to today's date context."""
-        today = self._get_current_date()
-        self.daily_spent_tracking[today] = self._get_daily_spent() + amount
+        self.accounts[account_id] = {
+            "name": name,
+            "pin": pin,
+            "balance": balance
+        }
 
-    def verify_balance(self) -> float:
-        return self.balance
+        self.transaction_history[account_id] = []
+        self.failed_pins[account_id] = 0
+        self.transaction_times[account_id] = []
 
-    def check_fraud(self, amount: float) -> bool:
-        current_time = time.time()
-        
-        # Rule 1: Clean expired transactions (>10 mins) to prevent memory leaks, then verify frequency
-        self.transactions = [tx for tx in self.transactions if current_time - tx['time'] <= 600]
-        
-        if len(self.transactions) >= 5:
-            print(f"[SECURITY ALERT] High frequency transaction flag: More than 5 transactions in 10 minutes.")
+        return "Account created successfully"
+
+    def verify_pin(self, account_id, pin):
+        if account_id not in self.accounts:
+            return False
+
+        if self.accounts[account_id]["pin"] == pin:
+            self.failed_pins[account_id] = 0
             return True
-            
-        # Rule 2: Large transaction anomaly
-        if amount > (self.daily_limit * 0.9):
-            print(f"[SECURITY ALERT] Large transaction flag: Amount exceeds 90% of daily limit.")
-            return True
-            
+
+        self.failed_pins[account_id] += 1
         return False
 
-    def deposit(self, amount: float, tracking_type: str = 'deposit') -> bool:
-        if amount <= 0:
-            print(f"[ERROR] Deposit Rejected: {amount} is an invalid amount.")
-            return False
-
-        self.balance += amount
-        self.transactions.append({'type': tracking_type, 'amount': amount, 'time': time.time()})
-        print(f"[SUCCESS] Deposited: {amount:,.2f} | Current Balance: {self.balance:,.2f}")
-        return True
-
-    def withdraw(self, amount: float, entered_pin: str) -> bool:
-        if self.is_locked:
-            print(f"[ERROR] Transaction Blocked: Account {self.account_id} is locked.")
-            return False
+    def deposit(self, account_id, amount):
+        if account_id not in self.accounts:
+            return "Invalid account"
 
         if amount <= 0:
-            print(f"[ERROR] Transaction Declined: Non-positive input values are invalid.")
-            return False
+            return "Invalid amount"
 
-        if entered_pin != self.pin:
-            self.failed_pin_attempts += 1
-            print(f"[ERROR] Incorrect PIN entered.")
-            if self.failed_pin_attempts >= 3:
-                self.is_locked = True
-                print(f"[SECURITY ALERT] Multiple failed PIN attempts: Account {self.account_id} is now LOCKED.")
-            return False
-            
-        self.failed_pin_attempts = 0
+        with self.lock:
+            self.accounts[account_id]["balance"] += amount
+            self.record_transaction(account_id, "Deposit", amount)
 
-        if amount > self.balance:
-            print(f"[ERROR] Transaction Declined: Insufficient balance.")
-            return False
+        return "Deposit successful"
 
-        if self._get_daily_spent() + amount > self.daily_limit:
-            print(f"[ERROR] Transaction Declined: Exceeds daily limit constraint.")
-            return False
+    def withdrawal(self, account_id, amount, pin):
+        if not self.verify_pin(account_id, pin):
+            return "Invalid PIN"
 
-        if self.check_fraud(amount):
-            print(f"[ERROR] Transaction Suspended: Flagged as highly suspicious.")
-            return False
+        if amount <= 0:
+            return "Invalid amount"
 
-        self.balance -= amount
-        self._add_daily_spent(amount)
-        self.transactions.append({'type': 'withdrawal', 'amount': amount, 'time': time.time()})
-        print(f"[SUCCESS] Withdrew: {amount:,.2f} | Current Balance: {self.balance:,.2f}")
-        return True
+        if account_id not in self.accounts:
+            return "Invalid account"
 
-    def transfer(self, target_wallet, amount: float, entered_pin: str) -> bool:
-        print(f"[PROCESSING] Attempting transfer of {amount:,.2f} from '{self.account_id}' to '{target_wallet.account_id}'...")
-        
-        # Withdraw from source first
-        if self.withdraw(amount, entered_pin):
-            # Deposit safely using encapsulation rules into target instance
-            target_wallet.deposit(amount, tracking_type=f'Received from {self.account_id}')
-            print(f"[SUCCESS] Transfer Successful!")
-            return True
-            
-        print(f"[ERROR] Transfer Failed.")
-        return False
+        if self.accounts[account_id]["balance"] < amount:
+            return "Insufficient balance"
 
-    def display_history(self):
-        print(f"\n==========================================")
-        print(f"REPORT: TRANSACTION HISTORY FOR ACC: {self.account_id}")
-        print(f"==========================================")
-        if not self.transactions:
-            print("No recorded transaction history logs.")
-        for idx, tx in enumerate(self.transactions, start=1):
-            print(f" [{idx}] Action: {tx['type'].capitalize()} | Amount: {tx['amount']:,.2f}")
-        print(f"==========================================\n")
+        if not self.check_daily_limit(account_id, amount):
+            return "Daily transaction limit exceeded"
+
+        with self.lock:
+            self.accounts[account_id]["balance"] -= amount
+            self.record_transaction(account_id, "Withdrawal", amount)
+
+        self.check_fraud(account_id, amount)
+
+        return "Withdrawal successful"
+
+    def transfer(self, sender, receiver, amount, pin):
+        if sender not in self.accounts or receiver not in self.accounts:
+            return "Invalid account"
+
+        if not self.verify_pin(sender, pin):
+            return "Invalid PIN"
+
+        if amount <= 0:
+            return "Invalid amount"
+
+        if self.accounts[sender]["balance"] < amount:
+            return "Insufficient balance"
+
+        if not self.check_daily_limit(sender, amount):
+            return "Daily transaction limit exceeded"
+
+        with self.lock:
+            self.accounts[sender]["balance"] -= amount
+            self.accounts[receiver]["balance"] += amount
+
+            self.record_transaction(
+                sender,
+                "Transfer to " + receiver,
+                amount
+            )
+
+            self.record_transaction(
+                receiver,
+                "Transfer from " + sender,
+                amount
+            )
+
+        self.check_fraud(sender, amount)
+
+        return "Transfer successful"
+
+    def check_daily_limit(self, account_id, amount):
+        today_total = 0
+
+        for transaction in self.transaction_history[account_id]:
+            if transaction["date"].date() == datetime.now().date():
+                today_total += transaction["amount"]
+
+        return today_total + amount <= self.daily_limit
+
+    def record_transaction(self, account_id, transaction_type, amount):
+        transaction = {
+            "type": transaction_type,
+            "amount": amount,
+            "date": datetime.now()
+        }
+
+        self.transaction_history[account_id].append(transaction)
+
+        self.transaction_times[account_id].append(datetime.now())
+
+        self.transaction_times[account_id] = [
+            t for t in self.transaction_times[account_id]
+            if datetime.now() - t <= timedelta(minutes=10)
+        ]
+
+    def check_fraud(self, account_id, amount):
+        suspicious = []
+
+        # More than 5 transactions in 10 minutes
+        if len(self.transaction_times[account_id]) > 5:
+            suspicious.append("More than 5 transactions in 10 minutes")
+
+        # Large transaction
+        if amount > 25000:
+            suspicious.append("Large transaction")
+
+        # Multiple failed PIN attempts
+        if self.failed_pins[account_id] >= 3:
+            suspicious.append("Multiple failed PIN attempts")
+
+        # Unusual transaction amount
+        if amount > 10000:
+            suspicious.append("Unusual transaction amount")
+
+        if suspicious:
+            print("FRAUD ALERT:", account_id)
+            for reason in suspicious:
+                print("-", reason)
+
+        return suspicious
+
+    def get_balance(self, account_id):
+        if account_id not in self.accounts:
+            return None
+
+        return self.accounts[account_id]["balance"]
+
+    def get_transaction_history(self, account_id):
+        if account_id not in self.accounts:
+            return []
+
+        return self.transaction_history[account_id]
 
 
-# =========================================================
-# SYSTEM TEST EXECUTION BLOCK
-# =========================================================
 if __name__ == "__main__":
-    print("=========================================================")
-    print("         STARTING AUTOMATED SYSTEM VALIDATION           ")
-    print("=========================================================\n")
 
-    print("--- SCENARIO 1: ACCOUNT CREATION AND DEPOSITS ---")
-    my_wallet = DigitalWallet(account_id="User-Primary-99", pin="4321", balance=1500.0, daily_limit=2000.0)
-    friend_wallet = DigitalWallet(account_id="User-Friend-22", pin="8888", balance=100.0)
-    my_wallet.deposit(500.0)
+    wallet = DigitalWallet()
 
-    print("\n--- SCENARIO 2: NORMAL WITHDRAWAL ---")
-    my_wallet.withdraw(200.0, "4321")
+    print(wallet.create_account("A101", "Thamarai", "1234", 10000))
+    print(wallet.create_account("A102", "Kumar", "5678", 5000))
 
-    print("\n--- SCENARIO 3: SAFE ENCAPSULATED TRANSFER ---")
-    my_wallet.transfer(friend_wallet, 300.0, "4321")
+    print(wallet.deposit("A101", 2000))
 
-    print("\n--- SCENARIO 4: CORRECTED INVALID NEGATIVE ENTRY ---")
-    my_wallet.withdraw(-50.0, "4321")
+    print(wallet.withdrawal("A101", 1000, "1234"))
 
-    print("\n--- SCENARIO 5: SECURITY BLOCKS - LOCKOUT TRIPPING ---")
-    my_wallet.withdraw(10.0, "1111")
-    my_wallet.withdraw(10.0, "2222")
-    my_wallet.withdraw(10.0, "5555")  # 3rd failure locks it
-    my_wallet.withdraw(10.0, "4321")  # Valid pin now fails because account is locked
+    print(wallet.transfer("A101", "A102", 2000, "1234"))
 
-    print("\n--- SCENARIO 6: RECIPIENT WALLET VALIDATION ---")
-    friend_wallet.display_history()
+    print("Balance:", wallet.get_balance("A101"))
 
-    print("=========================================================")
-    print("               EXECUTION SCRIPT COMPLETE                 ")
-    print("=========================================================")
+    print("\nTransaction History:")
+
+    for transaction in wallet.get_transaction_history("A101"):
+        print(transaction)
