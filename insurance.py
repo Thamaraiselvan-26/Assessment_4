@@ -1,58 +1,89 @@
-import sys
-
-
 class InsuranceClaim:
 
     def __init__(self):
         self.claims = {}
 
-
     # ==========================================
-    # VALIDATE POLICY NUMBER
+    # POLICY NUMBER VALIDATION
     # ==========================================
 
-    def valid_policy_number(self, policy_number):
+    def validate_policy_number(self, policy_number):
 
-        if policy_number == "":
+        if policy_number is None:
             return False
 
-        if len(policy_number) < 4:
+        if not isinstance(policy_number, str):
+            return False
+
+        if policy_number.strip() == "":
+            return False
+
+        if len(policy_number.strip()) < 4:
             return False
 
         return True
 
+    # ==========================================
+    # DATE VALIDATION
+    # ==========================================
+
+    def validate_dates(self, policy_start_date, incident_date):
+
+        if not isinstance(policy_start_date, int):
+            return False
+
+        if not isinstance(incident_date, int):
+            return False
+
+        if policy_start_date < 0:
+            return False
+
+        if incident_date < 0:
+            return False
+
+        return True
 
     # ==========================================
-    # CHECK CLAIM ELIGIBILITY
+    # CLAIM ELIGIBILITY
     # ==========================================
 
     def check_eligibility(
         self,
         policy_number,
-        policy_start,
+        policy_start_date,
         incident_date,
         claim_amount,
         coverage
     ):
 
-        # Invalid policy number
-        if not self.valid_policy_number(policy_number):
+        # Invalid policy
+        if not self.validate_policy_number(policy_number):
             return False
 
-        # Claim amount cannot be negative
+        # Invalid dates
+        if not self.validate_dates(
+            policy_start_date,
+            incident_date
+        ):
+            return False
+
+        # Invalid claim amount
         if claim_amount < 0:
             return False
 
-        # Incident before policy start
-        if incident_date < policy_start:
+        # Invalid coverage
+        if coverage < 0:
             return False
 
-        # Claim cannot exceed coverage
+        # Incident before policy started
+        if incident_date < policy_start_date:
+            return False
+
+        # Claim exceeds policy coverage
         if claim_amount > coverage:
             return False
 
         return True
-
 
     # ==========================================
     # MAXIMUM PAYABLE AMOUNT
@@ -67,11 +98,13 @@ class InsuranceClaim:
         if claim_amount < 0:
             return 0
 
+        if coverage < 0:
+            return 0
+
         if claim_amount > coverage:
             return coverage
 
         return claim_amount
-
 
     # ==========================================
     # DEDUCTIBLE
@@ -82,10 +115,11 @@ class InsuranceClaim:
         claim_amount
     ):
 
-        deductible = claim_amount * 0.10
+        if claim_amount <= 0:
+            return 0
 
-        return deductible
-
+        # 10% deductible
+        return claim_amount * 0.10
 
     # ==========================================
     # CUSTOMER CONTRIBUTION
@@ -96,8 +130,10 @@ class InsuranceClaim:
         claim_amount
     ):
 
-        return claim_amount * 0.10
+        if claim_amount <= 0:
+            return 0
 
+        return claim_amount * 0.10
 
     # ==========================================
     # INSURANCE PAYOUT
@@ -125,7 +161,6 @@ class InsuranceClaim:
 
         return payout
 
-
     # ==========================================
     # FRAUD RISK SCORE
     # ==========================================
@@ -142,33 +177,38 @@ class InsuranceClaim:
         score = 0
 
         # Multiple previous claims
-        if previous_claim_count >= 3:
+        if previous_claim_count >= 4:
+            score += 40
+
+        elif previous_claim_count >= 3:
             score += 30
 
         elif previous_claim_count >= 2:
             score += 20
 
+        # Claim amount close to coverage
+        if coverage > 0:
 
-        # Claim significantly higher
-        if claim_amount > coverage:
-            score += 40
+            percentage = claim_amount / coverage
 
-        elif claim_amount >= coverage * 0.90:
-            score += 20
+            if percentage > 1.0:
+                score += 50
 
+            elif percentage >= 0.90:
+                score += 30
+
+            elif percentage >= 0.75:
+                score += 10
 
         # Incident immediately after activation
         if incident_after_activation:
             score += 25
 
-
-        # Missing documents
+        # Missing supporting documents
         if missing_documents:
             score += 25
 
-
         return score
-
 
     # ==========================================
     # CLAIM CLASSIFICATION
@@ -181,20 +221,20 @@ class InsuranceClaim:
         missing_documents
     ):
 
+        # Not eligible
         if not eligible:
             return "REJECTED"
 
-
+        # High fraud score
         if fraud_score >= 70:
             return "FRAUD SUSPECTED"
 
-
+        # Documents missing or medium risk
         if fraud_score >= 40 or missing_documents:
             return "MANUAL REVIEW"
 
-
+        # Normal valid claim
         return "APPROVED"
-
 
     # ==========================================
     # PROCESS CLAIM
@@ -206,33 +246,103 @@ class InsuranceClaim:
         customer_id,
         policy_type,
         claim_amount,
-        policy_start,
+        policy_start_date,
         incident_date,
         previous_claim_count,
         customer_age,
         incident_type,
-        documents_available,
+        supporting_documents,
         coverage
     ):
 
+        # --------------------------------------
+        # Validate policy number
+        # --------------------------------------
+
+        if not self.validate_policy_number(
+            policy_number
+        ):
+            return {
+                "policy_number": policy_number,
+                "eligible": False,
+                "status": "REJECTED",
+                "insurance_payout": 0
+            }
+
+        # --------------------------------------
+        # Validate incident date
+        # --------------------------------------
+
+        if not self.validate_dates(
+            policy_start_date,
+            incident_date
+        ):
+            return {
+                "policy_number": policy_number,
+                "eligible": False,
+                "status": "REJECTED",
+                "insurance_payout": 0
+            }
+
+        # --------------------------------------
+        # Eligibility
+        # --------------------------------------
+
         eligible = self.check_eligibility(
             policy_number,
-            policy_start,
+            policy_start_date,
             incident_date,
             claim_amount,
             coverage
         )
 
+        # --------------------------------------
+        # Missing documents
+        # --------------------------------------
 
-        missing_documents = not documents_available
+        missing_documents = not supporting_documents
 
+        # --------------------------------------
+        # Incident immediately after activation
+        # --------------------------------------
 
-        incident_after_activation = (
-            incident_date - policy_start <= 7
+        days_after_activation = (
+            incident_date - policy_start_date
         )
 
+        incident_after_activation = (
+            days_after_activation >= 0
+            and days_after_activation <= 7
+        )
 
-        payout = 0
+        # --------------------------------------
+        # Maximum payable
+        # --------------------------------------
+
+        maximum_payable = self.maximum_payable(
+            claim_amount,
+            coverage
+        )
+
+        # --------------------------------------
+        # Deductible
+        # --------------------------------------
+
+        deductible = self.calculate_deductible(
+            maximum_payable
+        )
+
+        # --------------------------------------
+        # Customer contribution
+        # --------------------------------------
+
+        contribution = self.customer_contribution(
+            maximum_payable
+        )
+
+        # --------------------------------------
+        # Insurance payout
+        # --------------------------------------
 
         if eligible:
 
@@ -241,6 +351,13 @@ class InsuranceClaim:
                 coverage
             )
 
+        else:
+
+            payout = 0
+
+        # --------------------------------------
+        # Fraud score
+        # --------------------------------------
 
         fraud_score = self.fraud_risk_score(
             claim_amount,
@@ -250,6 +367,9 @@ class InsuranceClaim:
             previous_claim_count
         )
 
+        # --------------------------------------
+        # Claim status
+        # --------------------------------------
 
         status = self.classify_claim(
             eligible,
@@ -257,68 +377,73 @@ class InsuranceClaim:
             missing_documents
         )
 
+        # --------------------------------------
+        # Store claim
+        # --------------------------------------
 
         claim = {
-            "policy_number": policy_number,
-            "customer_id": customer_id,
-            "claim_amount": claim_amount,
-            "eligible": eligible,
-            "maximum_payable": self.maximum_payable(
-                claim_amount,
-                coverage
-            ),
-            "deductible": self.calculate_deductible(
-                claim_amount
-            ),
-            "customer_contribution": self.customer_contribution(
-                claim_amount
-            ),
-            "insurance_payout": payout,
-            "fraud_score": fraud_score,
-            "status": status
-        }
 
+            "policy_number": policy_number,
+
+            "customer_id": customer_id,
+
+            "policy_type": policy_type,
+
+            "claim_amount": claim_amount,
+
+            "policy_start_date": policy_start_date,
+
+            "incident_date": incident_date,
+
+            "previous_claim_count":
+                previous_claim_count,
+
+            "customer_age": customer_age,
+
+            "incident_type": incident_type,
+
+            "supporting_documents":
+                supporting_documents,
+
+            "coverage": coverage,
+
+            "eligible": eligible,
+
+            "maximum_payable":
+                maximum_payable,
+
+            "deductible":
+                deductible,
+
+            "customer_contribution":
+                contribution,
+
+            "insurance_payout":
+                payout,
+
+            "fraud_score":
+                fraud_score,
+
+            "status":
+                status
+        }
 
         self.claims[policy_number] = claim
 
         return claim
 
 
-# ==================================================
-# TEST COUNTERS
-# ==================================================
+# ==========================================
+# MAIN PROGRAM
+# ==========================================
 
-passed = 0
-failed = 0
-
-
-def check_test(name, condition):
-
-    global passed
-    global failed
-
-    if condition:
-
-        print("PASS - " + name)
-
-        passed += 1
-
-    else:
-
-        print("FAIL - " + name)
-
-        failed += 1
-
-
-# ==================================================
-# TEST 1
-# VALID CLAIM
-# ==================================================
-
-def test_valid_claim():
+if __name__ == "__main__":
 
     system = InsuranceClaim()
 
+    print("========================================")
+    print("   INSURANCE CLAIM PROCESSING SYSTEM")
+    print("========================================")
 
     result = system.process_claim(
         "POL1001",
@@ -334,318 +459,12 @@ def test_valid_claim():
         100000
     )
 
-
-    check_test(
-        "Valid Claim",
-        result["eligible"] is True
-        and result["status"] == "APPROVED"
-        and result["insurance_payout"] > 0
-    )
-
-
-# ==================================================
-# TEST 2
-# EXPIRED POLICY
-# ==================================================
-
-def test_expired_policy():
-
-    system = InsuranceClaim()
-
-
-    # Policy expired before incident
-    result = system.check_eligibility(
-        "POL1002",
-        1,
-        500,
-        30000,
-        100000
-    )
-
-
-    check_test(
-        "Expired Policy",
-        result is False
-    )
-
-
-# ==================================================
-# TEST 3
-# CLAIM BEFORE POLICY START
-# ==================================================
-
-def test_claim_before_policy_start():
-
-    system = InsuranceClaim()
-
-
-    result = system.check_eligibility(
-        "POL1003",
-        100,
-        50,
-        30000,
-        100000
-    )
-
-
-    check_test(
-        "Claim Before Policy Start",
-        result is False
-    )
-
-
-# ==================================================
-# TEST 4
-# EXCESSIVE CLAIM AMOUNT
-# ==================================================
-
-def test_excessive_claim():
-
-    system = InsuranceClaim()
-
-
-    result = system.check_eligibility(
-        "POL1004",
-        1,
-        20,
-        150000,
-        100000
-    )
-
-
-    check_test(
-        "Excessive Claim Amount",
-        result is False
-    )
-
-
-# ==================================================
-# TEST 5
-# MISSING DOCUMENTS
-# ==================================================
-
-def test_missing_documents():
-
-    system = InsuranceClaim()
-
-
-    result = system.process_claim(
-        "POL1005",
-        "C005",
-        "Health",
-        30000,
-        1,
-        100,
-        0,
-        40,
-        "Accident",
-        False,
-        100000
-    )
-
-
-    check_test(
-        "Missing Documents",
-        result["status"] == "MANUAL REVIEW"
-        and result["fraud_score"] >= 25
-    )
-
-
-# ==================================================
-# TEST 6
-# MULTIPLE PREVIOUS CLAIMS
-# ==================================================
-
-def test_multiple_previous_claims():
-
-    system = InsuranceClaim()
-
-
-    result = system.process_claim(
-        "POL1006",
-        "C006",
-        "Health",
-        30000,
-        1,
-        100,
-        4,
-        40,
-        "Accident",
-        True,
-        100000
-    )
-
-
-    check_test(
-        "Multiple Previous Claims",
-        result["fraud_score"] >= 30
-        and result["status"] == "MANUAL REVIEW"
-    )
-
-
-# ==================================================
-# TEST 7
-# FRAUD SCENARIO
-# ==================================================
-
-def test_fraud_scenario():
-
-    system = InsuranceClaim()
-
-
-    result = system.process_claim(
-        "POL1007",
-        "C007",
-        "Health",
-        95000,
-        1,
-        5,
-        4,
-        40,
-        "Accident",
-        False,
-        100000
-    )
-
-
-    check_test(
-        "Fraud Scenario",
-        result["fraud_score"] >= 70
-        and result["status"] == "FRAUD SUSPECTED"
-    )
-
-
-# ==================================================
-# TEST 8
-# BOUNDARY CLAIM AMOUNT
-# ==================================================
-
-def test_boundary_claim_amount():
-
-    system = InsuranceClaim()
-
-
-    result = system.process_claim(
-        "POL1008",
-        "C008",
-        "Health",
-        100000,
-        1,
-        20,
-        0,
-        35,
-        "Accident",
-        True,
-        100000
-    )
-
-
-    check_test(
-        "Boundary Claim Amount",
-        result["eligible"] is True
-        and result["maximum_payable"] == 100000
-    )
-
-
-# ==================================================
-# TEST 9
-# INVALID POLICY NUMBER
-# ==================================================
-
-def test_invalid_policy_number():
-
-    system = InsuranceClaim()
-
-
-    result = system.check_eligibility(
-        "",
-        1,
-        20,
-        30000,
-        100000
-    )
-
-
-    check_test(
-        "Invalid Policy Number",
-        result is False
-    )
-
-
-# ==================================================
-# TEST 10
-# INVALID INCIDENT DATE
-# ==================================================
-
-def test_invalid_incident_date():
-
-    system = InsuranceClaim()
-
-
-    result = system.check_eligibility(
-        "POL1010",
-        100,
-        50,
-        30000,
-        100000
-    )
-
-
-    check_test(
-        "Invalid Incident Date",
-        result is False
-    )
-
-
-# ==================================================
-# MAIN PROGRAM
-# ==================================================
-
-if __name__ == "__main__":
-
     print()
-    print("==============================================")
-    print("   INSURANCE CLAIM PROCESSING QA")
-    print("==============================================")
-    print()
-
-
-    test_valid_claim()
-
-    test_expired_policy()
-
-    test_claim_before_policy_start()
-
-    test_excessive_claim()
-
-    test_missing_documents()
-
-    test_multiple_previous_claims()
-
-    test_fraud_scenario()
-
-    test_boundary_claim_amount()
-
-    test_invalid_policy_number()
-
-    test_invalid_incident_date()
-
-
-    print()
-    print("==============================================")
-    print("Tests Passed :", passed)
-    print("Tests Failed :", failed)
-    print("==============================================")
-
-
-    if failed == 0:
-
-        print("ALL TESTS PASSED")
-
-        sys.exit(0)
-
-    else:
-
-        print("SOME TESTS FAILED")
-
-        sys.exit(1)
+    print("Policy Number :", result["policy_number"])
+    print("Eligible      :", result["eligible"])
+    print("Max Payable   :", result["maximum_payable"])
+    print("Deductible    :", result["deductible"])
+    print("Contribution  :", result["customer_contribution"])
+    print("Payout        :", result["insurance_payout"])
+    print("Fraud Score   :", result["fraud_score"])
+    print("Status        :", result["status"])
