@@ -2,10 +2,10 @@ from DigitalWallet import DigitalWallet
 import threading
 
 
-wallet = DigitalWallet()
-
-
 def test_account_creation():
+
+    wallet = DigitalWallet()
+
     result = wallet.create_account(
         "A101",
         "Thamarai",
@@ -14,110 +14,200 @@ def test_account_creation():
     )
 
     assert result == "Account created successfully"
-    print("PASS: Account creation")
+
+    print("PASS - Account Creation")
 
 
 def test_normal_transaction():
-    result = wallet.deposit("A101", 1000)
+
+    wallet = DigitalWallet()
+
+    wallet.create_account(
+        "A101",
+        "Thamarai",
+        "1234",
+        10000
+    )
+
+    result = wallet.deposit("A101", 2000)
 
     assert result == "Deposit successful"
-    print("PASS: Normal transaction")
+    assert wallet.get_balance("A101") == 12000
+
+    print("PASS - Normal Transaction")
 
 
 def test_insufficient_balance():
-    result = wallet.withdrawal(
+
+    wallet = DigitalWallet()
+
+    wallet.create_account(
         "A101",
-        50000,
+        "Thamarai",
+        "1234",
+        1000
+    )
+
+    result = wallet.withdraw(
+        "A101",
+        5000,
         "1234"
     )
 
     assert result == "Insufficient balance"
-    print("PASS: Insufficient balance")
+
+    print("PASS - Insufficient Balance")
 
 
 def test_daily_limit():
-    result = wallet.withdrawal(
+
+    wallet = DigitalWallet()
+
+    wallet.create_account(
         "A101",
-        50000,
+        "Thamarai",
+        "1234",
+        100000
+    )
+
+    result = wallet.withdraw(
+        "A101",
+        50001,
         "1234"
     )
 
     assert result == "Daily transaction limit exceeded"
-    print("PASS: Daily limit")
+
+    print("PASS - Daily Limit")
 
 
 def test_multiple_failed_pins():
 
-    wallet.verify_pin("A101", "1111")
-    wallet.verify_pin("A101", "2222")
-    wallet.verify_pin("A101", "3333")
+    wallet = DigitalWallet()
 
-    assert wallet.failed_pins["A101"] == 3
-    print("PASS: Multiple failed PINs")
+    wallet.create_account(
+        "A101",
+        "Thamarai",
+        "1234",
+        10000
+    )
+
+    wallet.withdraw("A101", 100, "1111")
+    wallet.withdraw("A101", 100, "2222")
+    result = wallet.withdraw("A101", 100, "3333")
+
+    assert result == \
+        "Account blocked due to multiple failed PIN attempts"
+
+    print("PASS - Multiple Failed PINs")
 
 
 def test_suspicious_transaction():
 
-    fraud = wallet.check_fraud(
+    wallet = DigitalWallet()
+
+    wallet.create_account(
+        "A101",
+        "Thamarai",
+        "1234",
+        100000
+    )
+
+    fraud = wallet.fraud_detection(
         "A101",
         30000
     )
 
     assert "Large transaction" in fraud
-    print("PASS: Suspicious transaction")
+
+    print("PASS - Suspicious Transaction")
 
 
 def test_duplicate_transaction():
 
-    history_before = len(
-        wallet.get_transaction_history("A101")
+    wallet = DigitalWallet()
+
+    wallet.create_account(
+        "A101",
+        "Thamarai",
+        "1234",
+        10000
     )
 
-    wallet.deposit("A101", 100)
+    wallet.deposit("A101", 1000)
+    wallet.deposit("A101", 1000)
 
-    wallet.deposit("A101", 100)
+    history = wallet.transaction_history("A101")
 
-    history_after = len(
-        wallet.get_transaction_history("A101")
-    )
+    assert len(history) == 2
 
-    assert history_after == history_before + 2
-
-    print("PASS: Duplicate transaction test")
+    print("PASS - Duplicate Transaction")
 
 
 def test_negative_amount():
 
-    result = wallet.deposit("A101", -500)
+    wallet = DigitalWallet()
+
+    wallet.create_account(
+        "A101",
+        "Thamarai",
+        "1234",
+        10000
+    )
+
+    result = wallet.deposit(
+        "A101",
+        -500
+    )
 
     assert result == "Invalid amount"
 
-    print("PASS: Negative amount")
+    print("PASS - Negative Amount")
 
 
-def concurrent_deposit():
+def deposit_thread(wallet):
 
-    wallet.deposit("A101", 100)
+    wallet.deposit(
+        "A101",
+        100
+    )
 
 
 def test_concurrent_transactions():
 
+    wallet = DigitalWallet()
+
+    wallet.create_account(
+        "A101",
+        "Thamarai",
+        "1234",
+        10000
+    )
+
     threads = []
 
     for i in range(5):
+
         thread = threading.Thread(
-            target=concurrent_deposit
+            target=deposit_thread,
+            args=(wallet,)
         )
+
         threads.append(thread)
         thread.start()
 
     for thread in threads:
         thread.join()
 
-    print("PASS: Concurrent transactions")
+    assert wallet.get_balance("A101") == 10500
+
+    print("PASS - Concurrent Transactions")
 
 
 if __name__ == "__main__":
+
+    print("DIGITAL WALLET QA TEST")
+    print("======================")
 
     test_account_creation()
     test_normal_transaction()
@@ -129,4 +219,5 @@ if __name__ == "__main__":
     test_negative_amount()
     test_concurrent_transactions()
 
-    print("\nAll tests completed.")
+    print("======================")
+    print("ALL TESTS PASSED")
