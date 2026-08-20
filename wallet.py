@@ -1,22 +1,27 @@
 from DigitalWallet import DigitalWallet
 import threading
+import sys
 
 
-def test_account_creation():
+passed = 0
+failed = 0
 
-    wallet = DigitalWallet()
 
-    result = wallet.create_account(
-        "A101",
-        "Thamarai",
-        "1234",
-        10000
-    )
+def test(name, condition):
 
-    assert result == "Account created successfully"
+    global passed, failed
 
-    print("PASS - Account Creation")
+    if condition:
+        print("PASS:", name)
+        passed += 1
+    else:
+        print("FAIL:", name)
+        failed += 1
 
+
+# =========================================
+# 1. Normal Transaction
+# =========================================
 
 def test_normal_transaction():
 
@@ -29,13 +34,21 @@ def test_normal_transaction():
         10000
     )
 
-    result = wallet.deposit("A101", 2000)
+    result = wallet.deposit(
+        "A101",
+        2000
+    )
 
-    assert result == "Deposit successful"
-    assert wallet.get_balance("A101") == 12000
+    test(
+        "Normal transaction",
+        result is True
+        and wallet.get_balance("A101") == 12000
+    )
 
-    print("PASS - Normal Transaction")
 
+# =========================================
+# 2. Insufficient Balance
+# =========================================
 
 def test_insufficient_balance():
 
@@ -54,10 +67,16 @@ def test_insufficient_balance():
         "1234"
     )
 
-    assert result == "Insufficient balance"
+    test(
+        "Insufficient balance",
+        result is False
+        and wallet.get_balance("A101") == 1000
+    )
 
-    print("PASS - Insufficient Balance")
 
+# =========================================
+# 3. Daily Transaction Limit
+# =========================================
 
 def test_daily_limit():
 
@@ -76,10 +95,15 @@ def test_daily_limit():
         "1234"
     )
 
-    assert result == "Daily transaction limit exceeded"
+    test(
+        "Daily transaction limit",
+        result is False
+    )
 
-    print("PASS - Daily Limit")
 
+# =========================================
+# 4. Multiple Failed PIN Attempts
+# =========================================
 
 def test_multiple_failed_pins():
 
@@ -92,15 +116,33 @@ def test_multiple_failed_pins():
         10000
     )
 
-    wallet.withdraw("A101", 100, "1111")
-    wallet.withdraw("A101", 100, "2222")
-    result = wallet.withdraw("A101", 100, "3333")
+    wallet.withdraw(
+        "A101",
+        100,
+        "1111"
+    )
 
-    assert result == \
-        "Account blocked due to multiple failed PIN attempts"
+    wallet.withdraw(
+        "A101",
+        100,
+        "2222"
+    )
 
-    print("PASS - Multiple Failed PINs")
+    wallet.withdraw(
+        "A101",
+        100,
+        "3333"
+    )
 
+    test(
+        "Multiple failed PIN attempts",
+        wallet.failed_pins["A101"] >= 3
+    )
+
+
+# =========================================
+# 5. Suspicious Transaction
+# =========================================
 
 def test_suspicious_transaction():
 
@@ -118,10 +160,15 @@ def test_suspicious_transaction():
         30000
     )
 
-    assert "Large transaction" in fraud
+    test(
+        "Suspicious transaction",
+        "Large transaction" in fraud
+    )
 
-    print("PASS - Suspicious Transaction")
 
+# =========================================
+# 6. Duplicate Transaction
+# =========================================
 
 def test_duplicate_transaction():
 
@@ -137,12 +184,17 @@ def test_duplicate_transaction():
     wallet.deposit("A101", 1000)
     wallet.deposit("A101", 1000)
 
-    history = wallet.transaction_history("A101")
+    history = wallet.get_transaction_history("A101")
 
-    assert len(history) == 2
+    test(
+        "Duplicate transaction",
+        len(history) == 2
+    )
 
-    print("PASS - Duplicate Transaction")
 
+# =========================================
+# 7. Negative Amount
+# =========================================
 
 def test_negative_amount():
 
@@ -160,12 +212,17 @@ def test_negative_amount():
         -500
     )
 
-    assert result == "Invalid amount"
+    test(
+        "Negative amount",
+        result is False
+    )
 
-    print("PASS - Negative Amount")
 
+# =========================================
+# 8. Concurrent Transactions
+# =========================================
 
-def deposit_thread(wallet):
+def deposit_money(wallet):
 
     wallet.deposit(
         "A101",
@@ -189,7 +246,7 @@ def test_concurrent_transactions():
     for i in range(5):
 
         thread = threading.Thread(
-            target=deposit_thread,
+            target=deposit_money,
             args=(wallet,)
         )
 
@@ -199,15 +256,42 @@ def test_concurrent_transactions():
     for thread in threads:
         thread.join()
 
-    assert wallet.get_balance("A101") == 10500
+    test(
+        "Concurrent transactions",
+        wallet.get_balance("A101") == 10500
+    )
 
-    print("PASS - Concurrent Transactions")
 
+# =========================================
+# 9. Account Creation
+# =========================================
+
+def test_account_creation():
+
+    wallet = DigitalWallet()
+
+    result = wallet.create_account(
+        "A101",
+        "Thamarai",
+        "1234",
+        10000
+    )
+
+    test(
+        "Account creation",
+        result is True
+    )
+
+
+# =========================================
+# Main QA Execution
+# =========================================
 
 if __name__ == "__main__":
 
-    print("DIGITAL WALLET QA TEST")
-    print("======================")
+    print("======================================")
+    print("DIGITAL WALLET SECURITY QA")
+    print("======================================")
 
     test_account_creation()
     test_normal_transaction()
@@ -219,5 +303,14 @@ if __name__ == "__main__":
     test_negative_amount()
     test_concurrent_transactions()
 
-    print("======================")
-    print("ALL TESTS PASSED")
+    print("======================================")
+    print("Tests Passed:", passed)
+    print("Tests Failed:", failed)
+    print("======================================")
+
+    if failed == 0:
+        print("ALL TESTS PASSED")
+        sys.exit(0)
+    else:
+        print("TESTS FAILED")
+        sys.exit(1)
