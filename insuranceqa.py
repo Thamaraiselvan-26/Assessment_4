@@ -8,83 +8,71 @@ failed = 0
 # INSURANCE CLAIM FUNCTIONS
 # ==========================================
 
-def check_policy(policy):
-    if policy == "":
+def valid_policy(policy):
+    return policy != "" and len(policy) >= 4
+
+
+def eligible(policy, start, incident, amount, coverage):
+
+    if not valid_policy(policy):
         return False
 
-    if len(policy) < 4:
+    if incident < start:
         return False
 
-    return True
-
-
-def check_eligibility(policy, start_date, incident_date,
-                      claim_amount, coverage):
-
-    if not check_policy(policy):
+    # Policy validity = 365 days
+    if incident > start + 365:
         return False
 
-    if incident_date < start_date:
+    if amount < 0:
         return False
 
-    if claim_amount < 0:
-        return False
-
-    if claim_amount > coverage:
+    if amount > coverage:
         return False
 
     return True
 
 
-def calculate_payout(claim_amount, coverage):
+def payout(amount, coverage):
 
-    if claim_amount > coverage:
+    if amount > coverage:
         amount = coverage
-    else:
-        amount = claim_amount
 
-    deductible = amount * 0.10
-
-    return amount - deductible
+    return amount * 0.90
 
 
-def fraud_score(claim_amount, coverage,
-                previous_claims,
-                missing_documents,
-                early_incident):
+def fraud_score(amount, coverage, previous, documents, early):
 
     score = 0
 
-    if previous_claims >= 4:
-        score = score + 40
+    if previous >= 4:
+        score += 40
+    elif previous >= 3:
+        score += 30
+    elif previous >= 2:
+        score += 20
 
-    elif previous_claims >= 3:
-        score = score + 30
+    if amount >= coverage * 0.90:
+        score += 30
 
-    elif previous_claims >= 2:
-        score = score + 20
+    if documents == False:
+        score += 25
 
-    if claim_amount >= coverage * 0.90:
-        score = score + 30
-
-    if missing_documents:
-        score = score + 25
-
-    if early_incident:
-        score = score + 25
+    if early:
+        score += 25
 
     return score
 
 
-def claim_status(eligible, score, missing_documents):
+def status(is_eligible, score, documents):
 
-    if not eligible:
+    if not is_eligible:
         return "REJECTED"
 
     if score >= 70:
         return "FRAUD SUSPECTED"
 
-    if score >= 40 or missing_documents:
+    if score >= 40 or documents == False:
         return "MANUAL REVIEW"
 
     return "APPROVED"
@@ -94,28 +82,26 @@ def claim_status(eligible, score, missing_documents):
 # TEST FUNCTION
 # ==========================================
 
-def test(name, condition):
+def check(name, result):
 
     global passed
     global failed
 
-    if condition:
+    if result:
         print("PASS - " + name)
-        passed = passed + 1
-
+        passed += 1
     else:
         print("FAIL - " + name)
-        failed = failed + 1
+        failed += 1
 
 
 # ==========================================
-# TEST 1
-# VALID CLAIM
+# 1. VALID CLAIM
 # ==========================================
 
 def test_valid_claim():
 
-    eligible = check_eligibility(
+    ok = eligible(
         "POL1001",
         1,
         20,
@@ -123,7 +109,7 @@ def test_valid_claim():
         100000
     )
 
-    payout = calculate_payout(
+    amount = payout(
         50000,
         100000
     )
@@ -132,53 +118,51 @@ def test_valid_claim():
         50000,
         100000,
         0,
-        False,
+        True,
         False
     )
 
-    status = claim_status(
-        eligible,
+    result = status(
+        ok,
         score,
-        False
+        True
     )
 
-    test(
+    check(
         "Valid Claim",
-        eligible
-        and payout == 45000
-        and status == "APPROVED"
+        ok
+        and amount == 45000
+        and result == "APPROVED"
     )
 
 
 # ==========================================
-# TEST 2
-# EXPIRED POLICY
+# 2. EXPIRED POLICY
 # ==========================================
 
 def test_expired_policy():
 
-    result = check_eligibility(
+    result = eligible(
         "POL1002",
         1,
-        500,
+        400,
         30000,
         100000
     )
 
-    test(
+    check(
         "Expired Policy",
         result == False
     )
 
 
 # ==========================================
-# TEST 3
-# CLAIM BEFORE POLICY START
+# 3. CLAIM BEFORE POLICY START
 # ==========================================
 
 def test_before_policy():
 
-    result = check_eligibility(
+    result = eligible(
         "POL1003",
         100,
         50,
@@ -186,20 +170,19 @@ def test_before_policy():
         100000
     )
 
-    test(
+    check(
         "Claim Before Policy Start",
         result == False
     )
 
 
 # ==========================================
-# TEST 4
-# EXCESSIVE CLAIM
+# 4. EXCESSIVE CLAIM
 # ==========================================
 
 def test_excessive_claim():
 
-    result = check_eligibility(
+    result = eligible(
         "POL1004",
         1,
         20,
@@ -207,20 +190,19 @@ def test_excessive_claim():
         100000
     )
 
-    test(
+    check(
         "Excessive Claim Amount",
         result == False
     )
 
 
 # ==========================================
-# TEST 5
-# MISSING DOCUMENTS
+# 5. MISSING DOCUMENTS
 # ==========================================
 
 def test_missing_documents():
 
-    eligible = check_eligibility(
+    ok = eligible(
         "POL1005",
         1,
         100,
@@ -232,32 +214,31 @@ def test_missing_documents():
         30000,
         100000,
         0,
-        True,
+        False,
         False
     )
 
-    status = claim_status(
-        eligible,
+    result = status(
+        ok,
         score,
-        True
+        False
     )
 
-    test(
+    check(
         "Missing Documents",
-        eligible
+        ok
         and score >= 25
-        and status == "MANUAL REVIEW"
+        and result == "MANUAL REVIEW"
     )
 
 
 # ==========================================
-# TEST 6
-# MULTIPLE PREVIOUS CLAIMS
+# 6. MULTIPLE PREVIOUS CLAIMS
 # ==========================================
 
 def test_previous_claims():
 
-    eligible = check_eligibility(
+    ok = eligible(
         "POL1006",
         1,
         100,
@@ -269,32 +250,31 @@ def test_previous_claims():
         30000,
         100000,
         4,
-        False,
+        True,
         False
     )
 
-    status = claim_status(
-        eligible,
+    result = status(
+        ok,
         score,
-        False
+        True
     )
 
-    test(
+    check(
         "Multiple Previous Claims",
-        eligible
+        ok
         and score >= 40
-        and status == "MANUAL REVIEW"
+        and result == "MANUAL REVIEW"
     )
 
 
 # ==========================================
-# TEST 7
-# FRAUD SCENARIO
+# 7. FRAUD SCENARIO
 # ==========================================
 
 def test_fraud():
 
-    eligible = check_eligibility(
+    ok = eligible(
         "POL1007",
         1,
         5,
@@ -306,32 +286,31 @@ def test_fraud():
         95000,
         100000,
         4,
-        True,
+        False,
         True
     )
 
-    status = claim_status(
-        eligible,
+    result = status(
+        ok,
         score,
-        True
+        False
     )
 
-    test(
+    check(
         "Fraud Scenario",
-        eligible
+        ok
         and score >= 70
-        and status == "FRAUD SUSPECTED"
+        and result == "FRAUD SUSPECTED"
     )
 
 
 # ==========================================
-# TEST 8
-# BOUNDARY CLAIM
+# 8. BOUNDARY CLAIM AMOUNT
 # ==========================================
 
 def test_boundary():
 
-    eligible = check_eligibility(
+    ok = eligible(
         "POL1008",
         1,
         20,
@@ -339,26 +318,25 @@ def test_boundary():
         100000
     )
 
-    payout = calculate_payout(
+    amount = payout(
         100000,
         100000
     )
 
-    test(
+    check(
         "Boundary Claim Amount",
-        eligible
-        and payout == 90000
+        ok
+        and amount == 90000
     )
 
 
 # ==========================================
-# TEST 9
-# INVALID POLICY
+# 9. INVALID POLICY NUMBER
 # ==========================================
 
 def test_invalid_policy():
 
-    result = check_eligibility(
+    result = eligible(
         "",
         1,
         20,
@@ -366,20 +344,19 @@ def test_invalid_policy():
         100000
     )
 
-    test(
+    check(
         "Invalid Policy Number",
         result == False
     )
 
 
 # ==========================================
-# TEST 10
-# INVALID INCIDENT DATE
+# 10. INVALID INCIDENT DATE
 # ==========================================
 
 def test_invalid_date():
 
-    result = check_eligibility(
+    result = eligible(
         "POL1010",
         100,
         50,
@@ -387,20 +364,20 @@ def test_invalid_date():
         100000
     )
 
-    test(
+    check(
         "Invalid Incident Date",
         result == False
     )
 
 
 # ==========================================
-# MAIN
+# RUN ALL TESTS
 # ==========================================
 
 print()
-print("======================================")
-print("   INSURANCE CLAIM QA TEST")
-print("======================================")
+print("==========================================")
+print("     INSURANCE CLAIM QA TEST")
+print("==========================================")
 print()
 
 test_valid_claim()
@@ -415,10 +392,10 @@ test_invalid_policy()
 test_invalid_date()
 
 print()
-print("======================================")
+print("==========================================")
 print("Tests Passed :", passed)
 print("Tests Failed :", failed)
-print("======================================")
+print("==========================================")
 
 if failed == 0:
     print("ALL TESTS PASSED")
