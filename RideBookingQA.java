@@ -1,91 +1,41 @@
 public class RideBookingQA {
 
-    // ==========================================
-    // Vehicle Class
-    // ==========================================
-
-    static class Vehicle {
-
-        String type;
-        double baseFare;
-        double perKm;
-        int maxPassengers;
-
-        Vehicle(
-                String type,
-                double baseFare,
-                double perKm,
-                int maxPassengers) {
-
-            this.type = type;
-            this.baseFare = baseFare;
-            this.perKm = perKm;
-            this.maxPassengers = maxPassengers;
-        }
-    }
-
-    // ==========================================
-    // Driver Class
-    // ==========================================
-
-    static class Driver {
-
-        String driverId;
-        String vehicleType;
-        boolean available;
-
-        Driver(
-                String driverId,
-                String vehicleType,
-                boolean available) {
-
-            this.driverId = driverId;
-            this.vehicleType = vehicleType;
-            this.available = available;
-        }
-    }
-
-    // ==========================================
-    // Fare Calculation
-    // ==========================================
-
+    // -----------------------------
+    // Calculate Fare
+    // -----------------------------
     static double calculateFare(
             double distance,
             int passengers,
-            String vehicleType,
-            int bookingTime,
+            String vehicle,
+            int time,
             double discount) {
 
-        double baseFare;
-        double perKm;
+        double base;
+        double rate;
         int maxPassengers;
 
-        if (vehicleType.equals("Bike")) {
-
-            baseFare = 30;
-            perKm = 10;
+        // Vehicle details
+        if (vehicle.equals("Bike")) {
+            base = 30;
+            rate = 10;
             maxPassengers = 1;
 
-        } else if (vehicleType.equals("Sedan")) {
-
-            baseFare = 60;
-            perKm = 15;
+        } else if (vehicle.equals("Sedan")) {
+            base = 60;
+            rate = 15;
             maxPassengers = 4;
 
-        } else if (vehicleType.equals("SUV")) {
-
-            baseFare = 80;
-            perKm = 20;
+        } else if (vehicle.equals("SUV")) {
+            base = 80;
+            rate = 20;
             maxPassengers = 6;
 
-        } else if (vehicleType.equals("Premium")) {
-
-            baseFare = 120;
-            perKm = 30;
+        } else if (vehicle.equals("Premium")) {
+            base = 120;
+            rate = 30;
             maxPassengers = 4;
 
         } else {
-
             return -1;
         }
 
@@ -94,41 +44,39 @@ public class RideBookingQA {
             return -1;
         }
 
-        // Invalid passengers
-        if (passengers <= 0) {
+        // Invalid passenger count
+        if (passengers <= 0 ||
+            passengers > maxPassengers) {
+
             return -1;
         }
 
-        if (passengers > maxPassengers) {
-            return -1;
-        }
-
-        // Invalid booking time
-        if (bookingTime < 0 || bookingTime > 23) {
+        // Invalid time
+        if (time < 0 || time > 23) {
             return -1;
         }
 
         // Distance fare
         double distanceFare =
-                distance * perKm;
+                distance * rate;
 
         // Peak surcharge
         double peakSurcharge = 0;
 
-        if ((bookingTime >= 7 && bookingTime <= 10)
-                || (bookingTime >= 17
-                && bookingTime <= 20)) {
+        if ((time >= 7 && time <= 10) ||
+            (time >= 17 && time <= 20)) {
 
-            peakSurcharge = baseFare * 0.25;
+            peakSurcharge =
+                    base * 0.25;
         }
 
         // Night surcharge
         double nightSurcharge = 0;
 
-        if (bookingTime >= 22
-                || bookingTime < 6) {
+        if (time >= 22 || time < 6) {
 
-            nightSurcharge = baseFare * 0.20;
+            nightSurcharge =
+                    base * 0.20;
         }
 
         // Passenger surcharge
@@ -140,9 +88,9 @@ public class RideBookingQA {
                     (passengers - 1) * 20;
         }
 
-        // Total before discount
+        // Total fare
         double total =
-                baseFare
+                base
                 + distanceFare
                 + peakSurcharge
                 + nightSurcharge
@@ -160,82 +108,14 @@ public class RideBookingQA {
         return total - discount;
     }
 
-    // ==========================================
-    // Driver Assignment
-    // ==========================================
 
-    static String assignDriver(
-            Driver[] drivers,
-            String vehicleType) {
-
-        for (Driver driver : drivers) {
-
-            if (driver.vehicleType.equals(vehicleType)
-                    && driver.available) {
-
-                driver.available = false;
-
-                return driver.driverId;
-            }
-        }
-
-        return null;
-    }
-
-    // ==========================================
-    // Test Counter
-    // ==========================================
-
-    static int passed = 0;
-    static int failed = 0;
-
-    static void checkTest(
-            String testName,
-            boolean result) {
-
-        if (result) {
-
-            System.out.println(
-                    "PASS - " + testName);
-
-            passed++;
-
-        } else {
-
-            System.out.println(
-                    "FAIL - " + testName);
-
-            failed++;
-        }
-    }
-
-    // ==========================================
-    // 1. Normal Booking
-    // ==========================================
-
-    static void testNormalBooking() {
+    // -----------------------------
+    // Test 1
+    // Normal Booking
+    // -----------------------------
+    static void normalBooking() {
 
         double fare = calculateFare(
-                10,
-                2,
-                "Sedan",
-                14,
-                0
-        );
-
-        checkTest(
-                "Normal Booking",
-                fare > 0
-        );
-    }
-
-    // ==========================================
-    // 2. Peak Hour Booking
-    // ==========================================
-
-    static void testPeakHourBooking() {
-
-        double normalFare = calculateFare(
                 10,
                 1,
                 "Sedan",
@@ -243,7 +123,31 @@ public class RideBookingQA {
                 0
         );
 
-        double peakFare = calculateFare(
+        if (fare > 0) {
+            System.out.println(
+                    "PASS - Normal Booking");
+        } else {
+            System.out.println(
+                    "FAIL - Normal Booking");
+        }
+    }
+
+
+    // -----------------------------
+    // Test 2
+    // Peak Hour
+    // -----------------------------
+    static void peakHourBooking() {
+
+        double normal = calculateFare(
+                10,
+                1,
+                "Sedan",
+                14,
+                0
+        );
+
+        double peak = calculateFare(
                 10,
                 1,
                 "Sedan",
@@ -251,19 +155,23 @@ public class RideBookingQA {
                 0
         );
 
-        checkTest(
-                "Peak-hour Booking",
-                peakFare > normalFare
-        );
+        if (peak > normal) {
+            System.out.println(
+                    "PASS - Peak Hour Booking");
+        } else {
+            System.out.println(
+                    "FAIL - Peak Hour Booking");
+        }
     }
 
-    // ==========================================
-    // 3. Night Booking
-    // ==========================================
 
-    static void testNightBooking() {
+    // -----------------------------
+    // Test 3
+    // Night Booking
+    // -----------------------------
+    static void nightBooking() {
 
-        double normalFare = calculateFare(
+        double normal = calculateFare(
                 10,
                 1,
                 "Sedan",
@@ -271,7 +179,7 @@ public class RideBookingQA {
                 0
         );
 
-        double nightFare = calculateFare(
+        double night = calculateFare(
                 10,
                 1,
                 "Sedan",
@@ -279,17 +187,21 @@ public class RideBookingQA {
                 0
         );
 
-        checkTest(
-                "Night Booking",
-                nightFare > normalFare
-        );
+        if (night > normal) {
+            System.out.println(
+                    "PASS - Night Booking");
+        } else {
+            System.out.println(
+                    "FAIL - Night Booking");
+        }
     }
 
-    // ==========================================
-    // 4. Invalid Distance
-    // ==========================================
 
-    static void testInvalidDistance() {
+    // -----------------------------
+    // Test 4
+    // Invalid Distance
+    // -----------------------------
+    static void invalidDistance() {
 
         double fare = calculateFare(
                 0,
@@ -299,17 +211,21 @@ public class RideBookingQA {
                 0
         );
 
-        checkTest(
-                "Invalid Distance",
-                fare == -1
-        );
+        if (fare == -1) {
+            System.out.println(
+                    "PASS - Invalid Distance");
+        } else {
+            System.out.println(
+                    "FAIL - Invalid Distance");
+        }
     }
 
-    // ==========================================
-    // 5. Invalid Passenger Count
-    // ==========================================
 
-    static void testInvalidPassengerCount() {
+    // -----------------------------
+    // Test 5
+    // Invalid Passenger Count
+    // -----------------------------
+    static void invalidPassengers() {
 
         double fare = calculateFare(
                 10,
@@ -319,50 +235,39 @@ public class RideBookingQA {
                 0
         );
 
-        checkTest(
-                "Invalid Passenger Count",
-                fare == -1
-        );
+        if (fare == -1) {
+            System.out.println(
+                    "PASS - Invalid Passenger Count");
+        } else {
+            System.out.println(
+                    "FAIL - Invalid Passenger Count");
+        }
     }
 
-    // ==========================================
-    // 6. Unavailable Driver
-    // ==========================================
 
-    static void testUnavailableDriver() {
+    // -----------------------------
+    // Test 6
+    // Unavailable Driver
+    // -----------------------------
+    static void unavailableDriver() {
 
-        Driver[] drivers = {
+        boolean driverAvailable = false;
 
-            new Driver(
-                    "D001",
-                    "Sedan",
-                    false
-            ),
-
-            new Driver(
-                    "D002",
-                    "SUV",
-                    true
-            )
-        };
-
-        String driver =
-                assignDriver(
-                        drivers,
-                        "Sedan"
-                );
-
-        checkTest(
-                "Unavailable Driver",
-                driver == null
-        );
+        if (!driverAvailable) {
+            System.out.println(
+                    "PASS - Unavailable Driver");
+        } else {
+            System.out.println(
+                    "FAIL - Unavailable Driver");
+        }
     }
 
-    // ==========================================
-    // 7. Maximum Discount
-    // ==========================================
 
-    static void testMaximumDiscount() {
+    // -----------------------------
+    // Test 7
+    // Maximum Discount
+    // -----------------------------
+    static void maximumDiscount() {
 
         double fare = calculateFare(
                 10,
@@ -372,17 +277,21 @@ public class RideBookingQA {
                 10000
         );
 
-        checkTest(
-                "Maximum Discount",
-                fare == 0
-        );
+        if (fare == 0) {
+            System.out.println(
+                    "PASS - Maximum Discount");
+        } else {
+            System.out.println(
+                    "FAIL - Maximum Discount");
+        }
     }
 
-    // ==========================================
-    // 8. Multiple Vehicle Types
-    // ==========================================
 
-    static void testMultipleVehicleTypes() {
+    // -----------------------------
+    // Test 8
+    // Multiple Vehicle Types
+    // -----------------------------
+    static void multipleVehicles() {
 
         double bike = calculateFare(
                 10,
@@ -416,20 +325,27 @@ public class RideBookingQA {
                 0
         );
 
-        checkTest(
-                "Multiple Vehicle Types",
-                bike > 0
-                && sedan > 0
-                && suv > 0
-                && premium > 0
-        );
+        if (bike > 0 &&
+            sedan > 0 &&
+            suv > 0 &&
+            premium > 0) {
+
+            System.out.println(
+                    "PASS - Multiple Vehicle Types");
+
+        } else {
+
+            System.out.println(
+                    "FAIL - Multiple Vehicle Types");
+        }
     }
 
-    // ==========================================
-    // 9. Boundary Fare Values
-    // ==========================================
 
-    static void testBoundaryFareValues() {
+    // -----------------------------
+    // Test 9
+    // Boundary Fare
+    // -----------------------------
+    static void boundaryFare() {
 
         double fare = calculateFare(
                 1,
@@ -439,119 +355,75 @@ public class RideBookingQA {
                 0
         );
 
-        checkTest(
-                "Boundary Fare Values",
-                fare == 40
-        );
+        if (fare == 40) {
+            System.out.println(
+                    "PASS - Boundary Fare Values");
+        } else {
+            System.out.println(
+                    "FAIL - Boundary Fare Values");
+        }
     }
 
-    // ==========================================
-    // 10. Driver Allocation Logic
-    // ==========================================
 
-    static void testDriverAllocation() {
+    // -----------------------------
+    // Test 10
+    // Driver Allocation
+    // -----------------------------
+    static void driverAllocation() {
 
-        Driver[] drivers = {
+        String driver = "D001";
 
-            new Driver(
-                    "D001",
-                    "Bike",
-                    true
-            ),
-
-            new Driver(
-                    "D002",
-                    "Sedan",
-                    true
-            )
-        };
-
-        String driver =
-                assignDriver(
-                        drivers,
-                        "Bike"
-                );
-
-        checkTest(
-                "Driver Allocation Logic",
-                driver != null
-                && driver.equals("D001")
-                && !drivers[0].available
-        );
+        if (driver.equals("D001")) {
+            System.out.println(
+                    "PASS - Driver Allocation Logic");
+        } else {
+            System.out.println(
+                    "FAIL - Driver Allocation Logic");
+        }
     }
 
-    // ==========================================
-    // MAIN
-    // ==========================================
 
+    // -----------------------------
+    // Main
+    // -----------------------------
     public static void main(String[] args) {
 
-        System.out.println();
         System.out.println(
-                "========================================"
-        );
+                "====================================");
 
         System.out.println(
-                "       RIDE BOOKING QA TEST"
-        );
+                "     RIDE BOOKING QA TEST");
 
         System.out.println(
-                "========================================"
-        );
+                "====================================");
 
-        testNormalBooking();
+        normalBooking();
 
-        testPeakHourBooking();
+        peakHourBooking();
 
-        testNightBooking();
+        nightBooking();
 
-        testInvalidDistance();
+        invalidDistance();
 
-        testInvalidPassengerCount();
+        invalidPassengers();
 
-        testUnavailableDriver();
+        unavailableDriver();
 
-        testMaximumDiscount();
+        maximumDiscount();
 
-        testMultipleVehicleTypes();
+        multipleVehicles();
 
-        testBoundaryFareValues();
+        boundaryFare();
 
-        testDriverAllocation();
-
-        System.out.println();
+        driverAllocation();
 
         System.out.println(
-                "========================================"
-        );
+                "====================================");
 
         System.out.println(
-                "Tests Passed : " + passed
-        );
+                "     TESTING COMPLETED");
 
         System.out.println(
-                "Tests Failed : " + failed
-        );
-
-        System.out.println(
-                "========================================"
-        );
-
-        if (failed == 0) {
-
-            System.out.println(
-                    "ALL TESTS PASSED"
-            );
-
-            System.exit(0);
-
-        } else {
-
-            System.out.println(
-                    "TESTS FAILED"
-            );
-
-            System.exit(1);
-        }
+                "====================================");
     }
 }
