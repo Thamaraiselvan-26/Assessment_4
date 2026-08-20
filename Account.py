@@ -7,165 +7,141 @@ class DigitalWallet:
         self.balance = balance
         self.daily_limit = daily_limit
         
-        self.transactions = []        # History tracking list
-        self.failed_pin_attempts = 0  # Counter for invalid pins
-        self.daily_spent = 0.0        # Tracks accumulation against threshold
+        self.transactions = []        
+        self.failed_pin_attempts = 0  
+        self.daily_spent = 0.0        
         self.is_locked = False
 
     def verify_balance(self) -> float:
-        """Requirement: Balance verification"""
         return self.balance
 
     def check_fraud(self, amount: float) -> bool:
-        """Requirement: Fraud detection mechanism logic"""
         current_time = time.time()
         
         # Rule 1: More than 5 transactions in 10 minutes
         recent_txs = [tx for tx in self.transactions if current_time - tx['time'] <= 600]
         if len(recent_txs) >= 5:
-            print(f"⚠️  [FRAUD DETECTED] High frequency transaction flag! (>5 transactions in 10 mins)")
+            print(f"[SECURITY ALERT] High frequency transaction flag: More than 5 transactions in 10 minutes.")
             return True
             
         # Rule 2: Large transaction anomaly
         if amount > (self.daily_limit * 0.9):
-            print(f"⚠️  [FRAUD DETECTED] Large transaction flag! Amount exceeds 90% of daily limit.")
+            print(f"[SECURITY ALERT] Large transaction flag: Amount exceeds 90% of daily limit.")
             return True
             
         # Rule 3: Unusual transaction amount
         if amount <= 0:
-            print(f"⚠️  [FRAUD DETECTED] Unusual transaction amount flag! Non-positive value detected.")
+            print(f"[SECURITY ALERT] Unusual transaction amount flag: Non-positive value detected.")
             return True
             
         return False
 
     def deposit(self, amount: float) -> bool:
-        """Requirement: Deposit funds"""
         if amount <= 0:
-            print(f"❌ Deposit Rejected: ${amount} is an invalid amount.")
+            print(f"[ERROR] Deposit Rejected: {amount} is an invalid amount.")
             return False
         self.balance += amount
         self.transactions.append({'type': 'deposit', 'amount': amount, 'time': time.time()})
-        print(f"✅ Deposited: ${amount:,.2f} | Current Balance: ${self.balance:,.2f}")
+        print(f"[SUCCESS] Deposited: {amount:,.2f} | Current Balance: {self.balance:,.2f}")
         return True
 
     def withdraw(self, amount: float, entered_pin: str) -> bool:
-        """Requirement: Withdrawal with PIN safety validation"""
         if self.is_locked:
-            print(f"❌ Transaction Blocked: Account {self.account_id} is locked due to multiple failed PIN attempts.")
+            print(f"[ERROR] Transaction Blocked: Account {self.account_id} is locked due to multiple failed PIN attempts.")
             return False
 
         if entered_pin != self.pin:
             self.failed_pin_attempts += 1
-            print(f"❌ Incorrect PIN entered.")
+            print(f"[ERROR] Incorrect PIN entered.")
             if self.failed_pin_attempts >= 3:
                 self.is_locked = True
-                print(f"⚠️  [FRAUD DETECTED] Multiple failed PIN attempts! Account {self.account_id} is now LOCKED.")
+                print(f"[SECURITY ALERT] Multiple failed PIN attempts: Account {self.account_id} is now LOCKED.")
             return False
 
-        self.failed_pin_attempts = 0  # Reset on successful PIN Entry
+        self.failed_pin_attempts = 0  
 
         if amount > self.balance:
-            print(f"❌ Transaction Declined: Insufficient balance. (Attempted: ${amount:,.2f}, Available: ${self.balance:,.2f})")
+            print(f"[ERROR] Transaction Declined: Insufficient balance. (Attempted: {amount:,.2f}, Available: {self.balance:,.2f})")
             return False
 
-        # Requirement: Daily transaction limit rule checking
         if self.daily_spent + amount > self.daily_limit:
-            print(f"❌ Transaction Declined: Exceeds daily limit constraint.")
+            print(f"[ERROR] Transaction Declined: Exceeds daily limit constraint.")
             return False
 
         if self.check_fraud(amount):
-            print(f"❌ Transaction Suspended: Flagged as highly suspicious.")
+            print(f"[ERROR] Transaction Suspended: Flagged as highly suspicious.")
             return False
 
-        # Apply valid financial state changes
         self.balance -= amount
         self.daily_spent += amount
         self.transactions.append({'type': 'withdrawal', 'amount': amount, 'time': time.time()})
-        print(f"✅ Withdrew: ${amount:,.2f} | Current Balance: ${self.balance:,.2f}")
+        print(f"[SUCCESS] Withdrew: {amount:,.2f} | Current Balance: {self.balance:,.2f}")
         return True
 
     def transfer(self, target_wallet, amount: float, entered_pin: str) -> bool:
-        """Requirement: Money transfer feature"""
-        print(f"🔄 Attempting transfer of ${amount:,.2f} from Account '{self.account_id}' to Account '{target_wallet.account_id}'...")
+        print(f"[PROCESSING] Attempting transfer of {amount:,.2f} from Account '{self.account_id}' to Account '{target_wallet.account_id}'...")
         if self.withdraw(amount, entered_pin):
             target_wallet.balance += amount
             target_wallet.transactions.append({'type': f'Received from {self.account_id}', 'amount': amount, 'time': time.time()})
-            print(f"✅ Transfer Successful!")
+            print(f"[SUCCESS] Transfer Successful!")
             return True
             
-        print(f"❌ Transfer Failed.")
+        print(f"[ERROR] Transfer Failed.")
         return False
 
     def display_history(self):
-        """Requirement: Transaction history visualization"""
         print(f"\n==========================================")
-        print(f"📜 TRANSACTION HISTORY FOR ACC: {self.account_id}")
+        print(f"REPORT: TRANSACTION HISTORY FOR ACC: {self.account_id}")
         print(f"==========================================")
         if not self.transactions:
             print("No recorded transaction history logs.")
         for idx, tx in enumerate(self.transactions, start=1):
-            print(f" [{idx}] Action: {tx['type'].capitalize()} | Amount: ${tx['amount']:,.2f}")
+            print(f" [{idx}] Action: {tx['type'].capitalize()} | Amount: {tx['amount']:,.2f}")
         print(f"==========================================\n")
 
 
-# =====================================================================
-# AUTOMATED SCRIPT EXECUTION USING PRE-DEFINED VALUES
-# =====================================================================
 if __name__ == "__main__":
-    print("=================================================================")
-    print("        STARTING AUTOMATED TESTING WITH OWN PRE-DEFINED VALUES   ")
-    print("=================================================================\n")
+    print("=========================================================")
+    print("        STARTING AUTOMATED TESTING WITH SYSTEM VALUES    ")
+    print("=========================================================\n")
 
-    # 1. Feature Showcases: Account creation & initialization
-    print("--- 👤 DEMO: ACCOUNT CREATION & BALANCES ---")
+    print("--- SCENARIO: ACCOUNT CREATION AND BALANCES ---")
     my_wallet = DigitalWallet(account_id="User-Primary-99", pin="4321", balance=1500.0, daily_limit=2000.0)
     friend_wallet = DigitalWallet(account_id="User-Friend-22", pin="8888", balance=100.0)
-    print(f"Primary Account Created! Initial Balance: ${my_wallet.verify_balance():,.2f}")
+    print(f"Primary Account Created. Initial Balance: {my_wallet.verify_balance():,.2f}")
     
-    # 2. Demo: Deposit feature
     my_wallet.deposit(500.0)
 
-    # 3. Demo: Normal Withdrawal transaction validation
-    print("\n--- 💸 DEMO: NORMAL WITHDRAWAL ---")
+    print("\n--- SCENARIO: NORMAL WITHDRAWAL ---")
     my_wallet.withdraw(200.0, "4321")
 
-    # 4. Demo: Money Transfer transaction
-    print("\n--- 🔄 DEMO: MONEY TRANSFER ---")
+    print("\n--- SCENARIO: MONEY TRANSFER ---")
     my_wallet.transfer(friend_wallet, 300.0, "4321")
 
-    # 5. Demo: Error - Insufficient balance rule
-    print("\n--- 🛑 DEMO: INSUFFICIENT BALANCE ERROR ---")
+    print("\n--- SCENARIO: INSUFFICIENT BALANCE ERROR ---")
     my_wallet.withdraw(5000.0, "4321")
 
-    # 6. Demo: Fraud Rule - Multiple failed PIN attempts lockout tracking
-    print("\n--- 🔒 DEMO: SECURITY THREAT FRAUD DETECTION ---")
-    my_wallet.withdraw(10.0, "1111")  # Failed attempt 1
-    my_wallet.withdraw(10.0, "2222")  # Failed attempt 2
-    my_wallet.withdraw(10.0, "5555")  # Failed attempt 3 -> Locks Account
-    my_wallet.withdraw(10.0, "4321")  # Correct PIN, but account frozen
+    print("\n--- SCENARIO: SECURITY THREAT FRAUD DETECTION ---")
+    my_wallet.withdraw(10.0, "1111")  
+    my_wallet.withdraw(10.0, "2222")  
+    my_wallet.withdraw(10.0, "5555")  
+    my_wallet.withdraw(10.0, "4321")  
 
-    # 7. Demo: Fraud Rule - Unusual / Negative Amount tracking
-    print("\n--- 🛑 DEMO: UNUSUAL QUANTITY DETECTOR ---")
+    print("\n--- SCENARIO: UNUSUAL QUANTITY DETECTOR ---")
     unlocked_wallet = DigitalWallet(account_id="User-Secure-01", pin="1234", balance=1000.0)
     unlocked_wallet.withdraw(-50.0, "1234")
 
-    # 8. Demo: Fraud Rule - Large Anomaly transaction detection (>90% of limit)
-    print("\n--- 🚨 DEMO: ANOMALOUS LARGE TRANSACTION DETECTOR ---")
-    # Limit is $2,000, 95% of it is $1,900
+    print("\n--- SCENARIO: ANOMALOUS LARGE TRANSACTION DETECTOR ---")
     unlocked_wallet.withdraw(1900.0, "1234")
 
-    # 9. Demo: Fraud Rule - High Frequency / Velocity monitoring
-    print("\n--- ⚡ DEMO: MICRO-TRANSACTION VELOCITY COUNTER ---")
+    print("\n--- SCENARIO: MICRO-TRANSACTION VELOCITY COUNTER ---")
     velocity_wallet = DigitalWallet(account_id="User-Velocity-Test", pin="0000", balance=1000.0)
-    # Rapid fire 5 successful transactions
     for i in range(5):
         velocity_wallet.withdraw(1.0, "0000")
-    # 6th rapid execution breaks velocity threshold guidelines
     velocity_wallet.withdraw(1.0, "0000")
 
-    # 10. Demo: Final Ledger Breakdown reporting overview
     velocity_wallet.display_history()
     
-    print("=================================================================")
-    print("        EXECUTION SCRIPT RUN COMPLETE (ALL USE CASES VERIFIED)   ")
-    print("=================================================================")
+    print("=========================================================")
+    print("        EXECUTION SCRIPT RUN COMPLETE                    ")
+    print("=========================================================")
