@@ -3,15 +3,17 @@ import sys
 
 class ICUAllocation:
 
-    def __init__(self, beds):
-
-        self.available_beds = beds
+    def __init__(self, total_beds):
+        self.total_beds = total_beds
+        self.available_beds = total_beds
         self.patients = {}
         self.waiting_list = []
 
-    # ---------------------------------------
-    # Validate Patient
-    # ---------------------------------------
+
+    # ==========================================
+    # VALIDATE PATIENT
+    # ==========================================
+
     def validate_patient(
         self,
         patient_id,
@@ -42,9 +44,11 @@ class ICUAllocation:
 
         return True
 
-    # ---------------------------------------
-    # Calculate Priority
-    # ---------------------------------------
+
+    # ==========================================
+    # CALCULATE PRIORITY SCORE
+    # ==========================================
+
     def calculate_priority(
         self,
         oxygen,
@@ -56,43 +60,56 @@ class ICUAllocation:
 
         score = 0
 
-        # Oxygen
+        # Oxygen level
         if oxygen < 85:
             score += 40
+
         elif oxygen < 90:
             score += 30
+
         elif oxygen < 95:
             score += 15
+
 
         # Heart rate
         if heart_rate > 130:
             score += 25
+
         elif heart_rate > 110:
             score += 15
+
         elif heart_rate < 50:
             score += 20
+
 
         # Blood pressure
         if blood_pressure < 80:
             score += 20
+
         elif blood_pressure < 90:
             score += 10
+
 
         # Temperature
         if temperature >= 40:
             score += 20
+
         elif temperature >= 38:
             score += 10
+
 
         # Existing medical condition
         if medical_conditions:
             score += 10
 
+
         return score
 
-    # ---------------------------------------
-    # Classify Patient
-    # ---------------------------------------
+
+    # ==========================================
+    # CLASSIFY PATIENT
+    # ==========================================
+
     def classify_patient(self, score):
 
         if score >= 60:
@@ -107,9 +124,11 @@ class ICUAllocation:
         else:
             return "LOW"
 
-    # ---------------------------------------
-    # Add Patient
-    # ---------------------------------------
+
+    # ==========================================
+    # ADD PATIENT
+    # ==========================================
+
     def add_patient(
         self,
         patient_id,
@@ -122,11 +141,12 @@ class ICUAllocation:
         emergency=False
     ):
 
-        # Duplicate ID
+        # Reject duplicate patient
         if patient_id in self.patients:
             return False
 
-        # Validate
+
+        # Validate patient
         if not self.validate_patient(
             patient_id,
             age,
@@ -137,7 +157,8 @@ class ICUAllocation:
         ):
             return False
 
-        # Priority
+
+        # Calculate priority
         score = self.calculate_priority(
             oxygen,
             heart_rate,
@@ -146,92 +167,143 @@ class ICUAllocation:
             medical_conditions
         )
 
+
         category = self.classify_patient(score)
+
 
         patient = {
             "patient_id": patient_id,
+            "age": age,
+            "oxygen": oxygen,
+            "heart_rate": heart_rate,
+            "blood_pressure": blood_pressure,
+            "temperature": temperature,
+            "medical_conditions": medical_conditions,
             "priority_score": score,
             "category": category,
             "emergency": emergency,
             "icu_allocated": False
         }
 
-        # Allocate available bed
+
+        # Allocate ICU bed if available
         if self.available_beds > 0:
 
             patient["icu_allocated"] = True
+
             self.available_beds -= 1
 
         else:
 
             self.waiting_list.append(patient_id)
 
+
         self.patients[patient_id] = patient
 
         return True
 
 
+    # ==========================================
+    # EMERGENCY ALLOCATION
+    # ==========================================
+
+    def emergency_allocation(self, patient_id):
+
+        if patient_id not in self.patients:
+            return False
+
+
+        patient = self.patients[patient_id]
+
+        patient["emergency"] = True
+
+
+        if patient["icu_allocated"]:
+            return True
+
+
+        if self.available_beds > 0:
+
+            patient["icu_allocated"] = True
+
+            self.available_beds -= 1
+
+            if patient_id in self.waiting_list:
+                self.waiting_list.remove(patient_id)
+
+            return True
+
+
+        return False
+
+
 # ==========================================
-# Test Counter
+# TEST COUNTERS
 # ==========================================
 
 passed = 0
 failed = 0
 
 
-def check_test(test_name, condition):
+def check_test(test_name, result):
 
     global passed
     global failed
 
-    if condition:
+    if result:
 
         print("PASS - " + test_name)
+
         passed += 1
 
     else:
 
         print("FAIL - " + test_name)
+
         failed += 1
 
 
 # ==========================================
 # TEST 1
-# Critical Patient
+# CRITICAL PATIENT
 # ==========================================
 
 def test_critical_patient():
 
     system = ICUAllocation(1)
 
+
     result = system.add_patient(
         "P001",
-        60,
+        65,
         80,
         140,
         70,
-        40,
+        40.0,
         True
     )
 
+
     patient = system.patients["P001"]
+
 
     check_test(
         "Critical Patient",
-        result is True
+        result
         and patient["category"] == "CRITICAL"
-        and patient["icu_allocated"] is True
+        and patient["icu_allocated"]
     )
 
 
 # ==========================================
 # TEST 2
-# Normal Patient
+# NORMAL PATIENT
 # ==========================================
 
 def test_normal_patient():
 
     system = ICUAllocation(1)
+
 
     result = system.add_patient(
         "P002",
@@ -243,85 +315,108 @@ def test_normal_patient():
         False
     )
 
+
     patient = system.patients["P002"]
+
 
     check_test(
         "Normal Patient",
-        result is True
+        result
         and patient["category"] == "LOW"
-        and patient["icu_allocated"] is True
+        and patient["icu_allocated"]
     )
 
 
 # ==========================================
 # TEST 3
-# Emergency Case
+# EMERGENCY CASE
 # ==========================================
 
 def test_emergency_case():
 
     system = ICUAllocation(1)
 
-    result = system.add_patient(
+
+    # First patient occupies the bed
+    system.add_patient(
         "P003",
+        30,
+        98,
+        80,
+        120,
+        36.5,
+        False
+    )
+
+
+    # Emergency patient
+    result = system.add_patient(
+        "P004",
         70,
         80,
         140,
         70,
-        40,
+        40.0,
         True
     )
 
-    patient = system.patients["P003"]
-
-    check_test(
-        "Emergency Case",
-        result is True
-        and patient["emergency"] is True
-        and patient["icu_allocated"] is True
-    )
-
-
-# ==========================================
-# TEST 4
-# No ICU Beds
-# ==========================================
-
-def test_no_icu_beds():
-
-    system = ICUAllocation(0)
-
-    result = system.add_patient(
-        "P004",
-        50,
-        90,
-        90,
-        110,
-        37,
-        False
-    )
 
     patient = system.patients["P004"]
 
+
     check_test(
-        "No ICU Beds",
-        result is True
+        "Emergency Case",
+        result
+        and patient["emergency"]
         and patient["icu_allocated"] is False
         and "P004" in system.waiting_list
     )
 
 
 # ==========================================
+# TEST 4
+# NO ICU BEDS
+# ==========================================
+
+def test_no_icu_beds():
+
+    system = ICUAllocation(0)
+
+
+    result = system.add_patient(
+        "P005",
+        50,
+        90,
+        90,
+        110,
+        37.0,
+        False
+    )
+
+
+    patient = system.patients["P005"]
+
+
+    check_test(
+        "No ICU Beds",
+        result
+        and patient["icu_allocated"] is False
+        and "P005" in system.waiting_list
+    )
+
+
+# ==========================================
 # TEST 5
-# Duplicate Patient
+# DUPLICATE PATIENT
 # ==========================================
 
 def test_duplicate_patient():
 
     system = ICUAllocation(2)
 
+
     first = system.add_patient(
-        "P005",
+        "P006",
         40,
         95,
         80,
@@ -330,8 +425,9 @@ def test_duplicate_patient():
         False
     )
 
+
     second = system.add_patient(
-        "P005",
+        "P006",
         40,
         95,
         80,
@@ -339,6 +435,7 @@ def test_duplicate_patient():
         36.5,
         False
     )
+
 
     check_test(
         "Duplicate Patient",
@@ -349,15 +446,16 @@ def test_duplicate_patient():
 
 # ==========================================
 # TEST 6
-# Invalid Oxygen Level
+# INVALID OXYGEN LEVEL
 # ==========================================
 
 def test_invalid_oxygen():
 
     system = ICUAllocation(1)
 
+
     result = system.add_patient(
-        "P006",
+        "P007",
         40,
         101,
         80,
@@ -365,6 +463,7 @@ def test_invalid_oxygen():
         36.5,
         False
     )
+
 
     check_test(
         "Invalid Oxygen Level",
@@ -374,15 +473,16 @@ def test_invalid_oxygen():
 
 # ==========================================
 # TEST 7
-# Invalid Heart Rate
+# INVALID HEART RATE
 # ==========================================
 
 def test_invalid_heart_rate():
 
     system = ICUAllocation(1)
 
+
     result = system.add_patient(
-        "P007",
+        "P008",
         40,
         95,
         251,
@@ -390,6 +490,7 @@ def test_invalid_heart_rate():
         36.5,
         False
     )
+
 
     check_test(
         "Invalid Heart Rate",
@@ -399,52 +500,60 @@ def test_invalid_heart_rate():
 
 # ==========================================
 # TEST 8
-# Priority Boundary Values
+# PRIORITY BOUNDARY VALUES
 # ==========================================
 
 def test_priority_boundary():
 
     system = ICUAllocation(1)
 
+
+    # Score = 20 exactly
     score = system.calculate_priority(
-        95,
+        90,
         80,
         120,
-        36.5,
+        38,
         False
     )
 
+
     category = system.classify_patient(score)
+
 
     check_test(
         "Priority Boundary Values",
-        score == 0
-        and category == "LOW"
+        score == 20
+        and category == "MEDIUM"
     )
 
 
 # ==========================================
 # TEST 9
-# Multiple Patients Competing
+# MULTIPLE PATIENTS COMPETING
 # ==========================================
 
 def test_multiple_patients():
 
     system = ICUAllocation(1)
 
+
+    # Critical patient gets the only bed
     first = system.add_patient(
-        "P008",
-        60,
+        "P009",
+        65,
         80,
         140,
         70,
-        40,
+        40.0,
         True
     )
 
+
+    # Normal patient must wait
     second = system.add_patient(
-        "P009",
-        50,
+        "P010",
+        30,
         98,
         80,
         120,
@@ -452,39 +561,54 @@ def test_multiple_patients():
         False
     )
 
-    first_patient = system.patients["P008"]
-    second_patient = system.patients["P009"]
+
+    first_patient = system.patients["P009"]
+
+    second_patient = system.patients["P010"]
+
 
     check_test(
         "Multiple Patients Competing for Same Bed",
-        first is True
-        and second is True
-        and first_patient["icu_allocated"] is True
+        first
+        and second
+        and first_patient["category"] == "CRITICAL"
+        and first_patient["icu_allocated"]
         and second_patient["icu_allocated"] is False
-        and "P009" in system.waiting_list
+        and "P010" in system.waiting_list
     )
 
 
 # ==========================================
-# MAIN
+# MAIN PROGRAM
 # ==========================================
 
 if __name__ == "__main__":
 
     print()
     print("========================================")
-    print("       ICU ALLOCATION QA TEST")
+    print("      HOSPITAL ICU ALLOCATION QA")
     print("========================================")
+    print()
+
 
     test_critical_patient()
+
     test_normal_patient()
+
     test_emergency_case()
+
     test_no_icu_beds()
+
     test_duplicate_patient()
+
     test_invalid_oxygen()
+
     test_invalid_heart_rate()
+
     test_priority_boundary()
+
     test_multiple_patients()
+
 
     print()
     print("========================================")
@@ -492,12 +616,15 @@ if __name__ == "__main__":
     print("Tests Failed :", failed)
     print("========================================")
 
+
     if failed == 0:
 
         print("ALL TESTS PASSED")
+
         sys.exit(0)
 
     else:
 
         print("TESTS FAILED")
+
         sys.exit(1)
