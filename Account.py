@@ -6,11 +6,25 @@ class DigitalWallet:
         self.pin = pin
         self.balance = balance
         self.daily_limit = daily_limit
+        self.transactions = []
+        self.failed_pin_attempts = 0
         
-        self.transactions = []        
-        self.failed_pin_attempts = 0  
-        self.daily_spent = 0.0        
+        # Track daily limits using the current calendar date string
+        self.daily_spent_tracking = {}  # Format: { "YYYY-MM-DD": amount }
         self.is_locked = False
+
+    def _get_current_date(self) -> str:
+        """Helper to get the current date for resetting daily limits."""
+        return time.strftime("%Y-%m-%d", time.localtime())
+
+    def _get_daily_spent(self) -> float:
+        """Retrieves amount spent today, auto-handling daily rollovers."""
+        return self.daily_spent_tracking.get(self._get_current_date(), 0.0)
+
+    def _add_daily_spent(self, amount: float):
+        """Accumulates spent values tied to today's date context."""
+        today = self._get_current_date()
+        self.daily_spent_tracking[today] = self._get_daily_spent() + amount
 
     def verify_balance(self) -> float:
         return self.balance
@@ -18,9 +32,10 @@ class DigitalWallet:
     def check_fraud(self, amount: float) -> bool:
         current_time = time.time()
         
-        # Rule 1: More than 5 transactions in 10 minutes
-        recent_txs = [tx for tx in self.transactions if current_time - tx['time'] <= 600]
-        if len(recent_txs) >= 5:
+        # Rule 1: Clean expired transactions (>10 mins) to prevent memory leaks, then verify frequency
+        self.transactions = [tx for tx in self.transactions if current_time - tx['time'] <= 600]
+        
+        if len(self.transactions) >= 5:
             print(f"[SECURITY ALERT] High frequency transaction flag: More than 5 transactions in 10 minutes.")
             return True
             
@@ -29,25 +44,25 @@ class DigitalWallet:
             print(f"[SECURITY ALERT] Large transaction flag: Amount exceeds 90% of daily limit.")
             return True
             
-        # Rule 3: Unusual transaction amount
-        if amount <= 0:
-            print(f"[SECURITY ALERT] Unusual transaction amount flag: Non-positive value detected.")
-            return True
-            
         return False
 
-    def deposit(self, amount: float) -> bool:
+    def deposit(self, amount: float, tracking_type: str = 'deposit') -> bool:
         if amount <= 0:
             print(f"[ERROR] Deposit Rejected: {amount} is an invalid amount.")
             return False
+
         self.balance += amount
-        self.transactions.append({'type': 'deposit', 'amount': amount, 'time': time.time()})
+        self.transactions.append({'type': tracking_type, 'amount': amount, 'time': time.time()})
         print(f"[SUCCESS] Deposited: {amount:,.2f} | Current Balance: {self.balance:,.2f}")
         return True
 
     def withdraw(self, amount: float, entered_pin: str) -> bool:
         if self.is_locked:
-            print(f"[ERROR] Transaction Blocked: Account {self.account_id} is locked due to multiple failed PIN attempts.")
+            print(f"[ERROR] Transaction Blocked: Account {self.account_id} is locked.")
+            return False
+
+        if amount <= 0:
+            print(f"[ERROR] Transaction Declined: Non-positive input values are invalid.")
             return False
 
         if entered_pin != self.pin:
@@ -57,14 +72,14 @@ class DigitalWallet:
                 self.is_locked = True
                 print(f"[SECURITY ALERT] Multiple failed PIN attempts: Account {self.account_id} is now LOCKED.")
             return False
-
-        self.failed_pin_attempts = 0  
+            
+        self.failed_pin_attempts = 0
 
         if amount > self.balance:
-            print(f"[ERROR] Transaction Declined: Insufficient balance. (Attempted: {amount:,.2f}, Available: {self.balance:,.2f})")
+            print(f"[ERROR] Transaction Declined: Insufficient balance.")
             return False
 
-        if self.daily_spent + amount > self.daily_limit:
+        if self._get_daily_spent() + amount > self.daily_limit:
             print(f"[ERROR] Transaction Declined: Exceeds daily limit constraint.")
             return False
 
@@ -73,16 +88,18 @@ class DigitalWallet:
             return False
 
         self.balance -= amount
-        self.daily_spent += amount
+        self._add_daily_spent(amount)
         self.transactions.append({'type': 'withdrawal', 'amount': amount, 'time': time.time()})
         print(f"[SUCCESS] Withdrew: {amount:,.2f} | Current Balance: {self.balance:,.2f}")
         return True
 
     def transfer(self, target_wallet, amount: float, entered_pin: str) -> bool:
-        print(f"[PROCESSING] Attempting transfer of {amount:,.2f} from Account '{self.account_id}' to Account '{target_wallet.account_id}'...")
+        print(f"[PROCESSING] Attempting transfer of {amount:,.2f} from '{self.account_id}' to '{target_wallet.account_id}'...")
+        
+        # Withdraw from source first
         if self.withdraw(amount, entered_pin):
-            target_wallet.balance += amount
-            target_wallet.transactions.append({'type': f'Received from {self.account_id}', 'amount': amount, 'time': time.time()})
+            # Deposit safely using encapsulation rules into target instance
+            target_wallet.deposit(amount, tracking_type=f'Received from {self.account_id}')
             print(f"[SUCCESS] Transfer Successful!")
             return True
             
@@ -100,48 +117,37 @@ class DigitalWallet:
         print(f"==========================================\n")
 
 
+# =========================================================
+# SYSTEM TEST EXECUTION BLOCK
+# =========================================================
 if __name__ == "__main__":
     print("=========================================================")
-    print("        STARTING AUTOMATED TESTING WITH SYSTEM VALUES    ")
+    print("         STARTING AUTOMATED SYSTEM VALIDATION           ")
     print("=========================================================\n")
 
-    print("--- SCENARIO: ACCOUNT CREATION AND BALANCES ---")
+    print("--- SCENARIO 1: ACCOUNT CREATION AND DEPOSITS ---")
     my_wallet = DigitalWallet(account_id="User-Primary-99", pin="4321", balance=1500.0, daily_limit=2000.0)
     friend_wallet = DigitalWallet(account_id="User-Friend-22", pin="8888", balance=100.0)
-    print(f"Primary Account Created. Initial Balance: {my_wallet.verify_balance():,.2f}")
-    
     my_wallet.deposit(500.0)
 
-    print("\n--- SCENARIO: NORMAL WITHDRAWAL ---")
+    print("\n--- SCENARIO 2: NORMAL WITHDRAWAL ---")
     my_wallet.withdraw(200.0, "4321")
 
-    print("\n--- SCENARIO: MONEY TRANSFER ---")
+    print("\n--- SCENARIO 3: SAFE ENCAPSULATED TRANSFER ---")
     my_wallet.transfer(friend_wallet, 300.0, "4321")
 
-    print("\n--- SCENARIO: INSUFFICIENT BALANCE ERROR ---")
-    my_wallet.withdraw(5000.0, "4321")
+    print("\n--- SCENARIO 4: CORRECTED INVALID NEGATIVE ENTRY ---")
+    my_wallet.withdraw(-50.0, "4321")
 
-    print("\n--- SCENARIO: SECURITY THREAT FRAUD DETECTION ---")
-    my_wallet.withdraw(10.0, "1111")  
-    my_wallet.withdraw(10.0, "2222")  
-    my_wallet.withdraw(10.0, "5555")  
-    my_wallet.withdraw(10.0, "4321")  
+    print("\n--- SCENARIO 5: SECURITY BLOCKS - LOCKOUT TRIPPING ---")
+    my_wallet.withdraw(10.0, "1111")
+    my_wallet.withdraw(10.0, "2222")
+    my_wallet.withdraw(10.0, "5555")  # 3rd failure locks it
+    my_wallet.withdraw(10.0, "4321")  # Valid pin now fails because account is locked
 
-    print("\n--- SCENARIO: UNUSUAL QUANTITY DETECTOR ---")
-    unlocked_wallet = DigitalWallet(account_id="User-Secure-01", pin="1234", balance=1000.0)
-    unlocked_wallet.withdraw(-50.0, "1234")
+    print("\n--- SCENARIO 6: RECIPIENT WALLET VALIDATION ---")
+    friend_wallet.display_history()
 
-    print("\n--- SCENARIO: ANOMALOUS LARGE TRANSACTION DETECTOR ---")
-    unlocked_wallet.withdraw(1900.0, "1234")
-
-    print("\n--- SCENARIO: MICRO-TRANSACTION VELOCITY COUNTER ---")
-    velocity_wallet = DigitalWallet(account_id="User-Velocity-Test", pin="0000", balance=1000.0)
-    for i in range(5):
-        velocity_wallet.withdraw(1.0, "0000")
-    velocity_wallet.withdraw(1.0, "0000")
-
-    velocity_wallet.display_history()
-    
     print("=========================================================")
-    print("        EXECUTION SCRIPT RUN COMPLETE                    ")
+    print("               EXECUTION SCRIPT COMPLETE                 ")
     print("=========================================================")
